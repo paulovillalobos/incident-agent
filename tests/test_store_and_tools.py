@@ -170,3 +170,11 @@ def test_time_arguments_are_parsed_leniently(ctx: ToolContext, value: str) -> No
 def test_unparseable_times_are_tool_errors(ctx: ToolContext, value: str) -> None:
     with pytest.raises(ToolError):
         ctx.parse_time(value, 0)
+
+
+def test_unknown_names_and_ids_say_what_exists(ctx: ToolContext) -> None:
+    out = run_tool(ctx, "search_logs", {"service": "orders", "instance": "orders-a"})
+    assert out["matching"] == 0 and "no instance named 'orders-a'" in out["hint"]
+    with pytest.raises(ToolError, match=CULPRIT):
+        run_tool(ctx, "list_changes", {"change_id": "2023-10-05-123456"})
+    assert "pool_size" in run_tool(ctx, "read_file", {"path": "a/config/orders.toml"})["content"]

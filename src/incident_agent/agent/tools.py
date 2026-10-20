@@ -104,6 +104,21 @@ def _pct(values: list[float], q: float) -> float:
     return round(ordered[int(q * (len(ordered) - 1))], 1)
 
 
+def _unknown_names(ctx: ToolContext, service: str | None, instance: str | None) -> dict[str, str]:
+    """A hint when a filter names a service or instance that has no telemetry at all."""
+    hint: dict[str, str] = {}
+    for col, val in (("service", service), ("instance", instance)):
+        if not val:
+            continue
+        known = sorted(
+            {r[0] for r in ctx.conn.execute(f"SELECT DISTINCT {col} FROM spans") if r[0]}
+            | {r[0] for r in ctx.conn.execute(f"SELECT DISTINCT {col} FROM logs") if r[0]}
+        )
+        if val not in known:
+            hint["hint"] = f"no {col} named {val!r}; known: {', '.join(known)}"
+    return hint
+
+
 def _flag(body: str) -> dict[str, str]:
     return {"warning": INJECTION_WARNING} if _INJECTION.search(body) else {}
 
@@ -352,7 +367,8 @@ def search_spans(ctx: ToolContext, a: SearchSpansArgs) -> dict[str, Any]:
         f"SELECT {_SPAN_COLS} FROM spans WHERE {clause} ORDER BY {order} LIMIT ?",
         [*params, a.limit],
     ).fetchall()
-    return {"matching": total, "spans": [_span_row(ctx, r) for r in rows]}
+    hint = _unknown_names(ctx, a.service, a.instance) if not total else {}
+    return {"matching": total, "spans": [_span_row(ctx, r) for r in rows]} | hint
 
 
 def get_trace(ctx: ToolContext, a: GetTraceArgs) -> dict[str, Any]:
@@ -421,7 +437,8 @@ def search_logs(ctx: ToolContext, a: SearchLogsArgs) -> dict[str, Any]:
             g["count"] += 1
             g["last"] = ctx.ts(ts)
         ordered = sorted(groups.values(), key=lambda g: -int(g["count"]))
-        return {"patterns": ordered[: a.limit], "patterns_total": len(ordered)}
+        out = {"patterns": ordered[: a.limit], "patterns_total": len(ordered)}
+        return out | (_unknown_names(ctx, a.service, a.instance) if not ordered else {})
     total = ctx.conn.execute(f"SELECT COUNT(*) FROM logs WHERE {clause}", params).fetchone()[0]
     rows = ctx.conn.execute(
         f"SELECT log_id, ts_ns, service, instance, version, severity, body, trace_id, span_id"
@@ -443,7 +460,8 @@ def search_logs(ctx: ToolContext, a: SearchLogsArgs) -> dict[str, Any]:
             entry["trace_id"], entry["span_id"] = trace_id, span_id
         entry.update(_flag(body))
         logs.append(entry)
-    return {"matching": total, "logs": logs}
+    hint = _unknown_names(ctx, a.service, a.instance) if not total else {}
+    return {"matching": total, "logs": logs} | hint
 
 
 def metric_series(ctx: ToolContext, a: MetricArgs) -> dict[str, Any]:
@@ -505,7 +523,8 @@ def list_changes(ctx: ToolContext, a: ChangesArgs) -> dict[str, Any]:
             (a.change_id.removeprefix("change:"),),
         ).fetchone()
         if not row:
-            raise ToolError(f"no change {a.change_id}")
+            known = [r[0] for r in ctx.conn.execute("SELECT change_id FROM changes ORDER BY ts_ns")]
+            raise ToolError(f"no change {a.change_id}; known change ids: {', '.join(known)}")
         cid, ts, service, kind, author, title, vf, vt, diff = row
         return {
             "change_id": cid,
@@ -539,7 +558,10 @@ def list_changes(ctx: ToolContext, a: ChangesArgs) -> dict[str, Any]:
 
 
 def read_file(ctx: ToolContext, a: ReadFileArgs) -> dict[str, Any]:
-    rel = PurePosixPath(a.path.strip().lstrip("/") or ".")
+    raw = a.path.strip().lstrip("/")
+    if raw.startswith(("a/", "b/")) and not (ctx.tree / raw).exists():
+        raw = raw[2:]  # unified-diff path prefixes
+    rel = PurePosixPath(raw or ".")
     if ".." in rel.parts:
         raise ToolError("path must stay inside the system tree")
     target = ctx.tree / rel
