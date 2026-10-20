@@ -1,0 +1,42 @@
+name = "poison_message"
+title = "Fulfilment backlog grows after a gateway release"
+duration_s = 45
+
+[[events]]
+at_s = 6
+kind = "config"
+service = "worker"
+author = "ines"
+title = "worker: bump version after dependency update"
+restart = ["worker"]
+edits = [
+  { path = "config/worker.toml", old = 'version = "1.2.0"', new = 'version = "1.2.1"' },
+]
+
+[[events]]
+at_s = 12
+kind = "deploy"
+service = "gateway"
+author = "pedro"
+title = "gateway 2.3.0: pass delivery windows through for mobile 5.x named slots"
+restart = ["gateway"]
+culprit = true
+edits = [
+  { path = "config/gateway.toml", old = 'version = "2.2.4"', new = 'version = "2.3.0"' },
+  { path = "services/gateway/app.py", old = """    payload["delivery_window"] = normalize_window(req.delivery_window)
+""", new = """    # mobile 5.x sends named slots ("tomorrow 9-12"); fulfilment resolves them.
+    payload["delivery_window"] = req.delivery_window
+""" },
+]
+
+[ground_truth]
+service = "gateway"
+accept_services = ["gateway", "worker"]
+category = "poison_message"
+change = "culprit"
+explanation = "gateway 2.3.0 stopped normalising delivery_window, so mobile orders enqueue 'tomorrow 9-12'. The worker cannot parse it, retries the same message forever (max_attempts = 0) and blocks the queue."
+
+[[reference_fix]]
+path = "config/worker.toml"
+old = "max_attempts = 0"
+new = "max_attempts = 3"

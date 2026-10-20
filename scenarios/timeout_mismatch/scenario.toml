@@ -1,0 +1,50 @@
+name = "timeout_mismatch"
+title = "Gateway 504s after an upstream timeout change"
+duration_s = 45
+
+[[events]]
+at_s = 7
+kind = "config"
+service = "inventory"
+author = "marta"
+title = "inventory: raise load-shedding limit"
+restart = ["inventory"]
+edits = [
+  { path = "config/inventory.toml", old = 'version = "2.0.6"', new = 'version = "2.0.7"' },
+  { path = "config/inventory.toml", old = "max_inflight = 24", new = "max_inflight = 32" },
+]
+
+[[events]]
+at_s = 13
+kind = "config"
+service = "gateway"
+author = "pedro"
+title = "gateway: cap upstream wait at 120ms to protect p99"
+restart = ["gateway"]
+culprit = true
+edits = [
+  { path = "config/gateway.toml", old = 'version = "2.2.4"', new = 'version = "2.2.5"' },
+  { path = "config/gateway.toml", old = "timeout_ms = 3000", new = "timeout_ms = 120" },
+]
+
+[[events]]
+at_s = 21
+kind = "config"
+service = "payments"
+author = "rui"
+title = "payments: bump version for audit"
+restart = ["payments-a", "payments-b"]
+edits = [
+  { path = "config/payments.toml", old = 'version = "3.0.2"', new = 'version = "3.0.3"' },
+]
+
+[ground_truth]
+service = "gateway"
+category = "timeout_misconfiguration"
+change = "culprit"
+explanation = "The gateway timeout (120ms) is below the normal orders latency tail (~150-250ms p95, dominated by the payment provider). The gateway returns 504 while orders still completes the order."
+
+[[reference_fix]]
+path = "config/gateway.toml"
+old = "timeout_ms = 120"
+new = "timeout_ms = 3000"

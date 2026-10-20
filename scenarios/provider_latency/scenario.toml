@@ -1,0 +1,47 @@
+name = "provider_latency"
+title = "Checkout latency and errors while the payment provider region degrades"
+duration_s = 45
+
+[[events]]
+at_s = 8
+kind = "config"
+service = "worker"
+author = "ines"
+title = "worker: shorten queue poll interval"
+restart = ["worker"]
+edits = [
+  { path = "config/worker.toml", old = 'version = "1.2.0"', new = 'version = "1.2.1"' },
+  { path = "config/worker.toml", old = "poll_interval_ms = 50", new = "poll_interval_ms = 40" },
+]
+
+[[events]]
+at_s = 13
+kind = "external"
+service = "payment-provider"
+title = "payment provider eu1 degradation (not in our change log)"
+action = "provider_latency"
+params = { region = "eu1", median_ms = 650, sigma = 0.35 }
+culprit = true
+
+[[events]]
+at_s = 20
+kind = "deploy"
+service = "gateway"
+author = "deploy-bot"
+title = "gateway: rebuild on patched base image"
+restart = ["gateway"]
+edits = [
+  { path = "config/gateway.toml", old = 'version = "2.2.4"', new = 'version = "2.2.5"' },
+]
+
+[ground_truth]
+service = "payment-provider"
+accept_services = ["payment-provider", "payment-provider-eu1", "payments"]
+category = "external_dependency_latency"
+change = "none"
+explanation = "The external payment provider region eu1 became slow (median ~650ms). payments waits on it while orders holds pooled connections, so the pool also saturates; no internal change caused it."
+
+[[reference_fix]]
+path = "config/payments.toml"
+old = 'provider_region = "eu1"'
+new = 'provider_region = "eu2"'

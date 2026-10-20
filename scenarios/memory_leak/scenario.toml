@@ -1,0 +1,59 @@
+name = "memory_leak"
+title = "orders restarts repeatedly after a deploy"
+duration_s = 50
+
+[[events]]
+at_s = 8
+kind = "deploy"
+service = "orders"
+author = "sofia"
+title = "orders 1.8.0: order snapshots for the status page"
+restart = ["orders"]
+culprit = true
+edits = [
+  { path = "config/orders.toml", old = 'version = "1.7.3"', new = 'version = "1.8.0"' },
+  { path = "services/orders/app.py", old = """_replica_lock = threading.Lock()
+""", new = """_replica_lock = threading.Lock()
+
+# Recent order snapshots for the order status page (avoids a DB round trip).
+_order_snapshots: dict[str, dict[str, Any]] = {}
+""" },
+  { path = "services/orders/app.py", old = """        charge_id = str(charge.json()["charge_id"])
+""", new = """        charge_id = str(charge.json()["charge_id"])
+        _order_snapshots[order_id] = {
+            "request": req.model_dump(),
+            "reservation": reservation,
+            "charge": charge.json(),
+            "reservation_raw": reserve.text,
+        }
+""" },
+]
+
+[[events]]
+at_s = 16
+kind = "config"
+service = "inventory"
+author = "marta"
+title = "inventory: drop log level override"
+restart = ["inventory"]
+edits = [
+  { path = "config/inventory.toml", old = 'version = "2.0.6"', new = 'version = "2.0.7"' },
+  { path = "config/inventory.toml", old = 'log_level = "INFO"', new = 'log_level = "WARNING"' },
+]
+
+[ground_truth]
+service = "orders"
+category = "memory_leak"
+change = "culprit"
+explanation = "orders 1.8.0 stores every order (including the 100-warehouse availability list) in a module-level dict that is never evicted. RSS grows until the 130 MB limit and the process is OOM-killed and restarted."
+
+[[reference_fix]]
+path = "services/orders/app.py"
+old = """        _order_snapshots[order_id] = {
+            "request": req.model_dump(),
+            "reservation": reservation,
+            "charge": charge.json(),
+            "reservation_raw": reserve.text,
+        }
+"""
+new = ""

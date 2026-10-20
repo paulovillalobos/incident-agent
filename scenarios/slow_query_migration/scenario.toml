@@ -1,0 +1,62 @@
+name = "slow_query_migration"
+title = "Reservation latency after a schema migration"
+duration_s = 45
+
+[[events]]
+at_s = 7
+kind = "config"
+service = "orders"
+author = "joao"
+title = "orders: annotate pool settings"
+restart = ["orders"]
+edits = [
+  { path = "config/orders.toml", old = 'version = "1.7.3"', new = 'version = "1.7.4"' },
+  { path = "config/orders.toml", old = "acquire_timeout_ms = 500", new = "acquire_timeout_ms = 500  # fail fast under saturation" },
+]
+
+[[events]]
+at_s = 13
+kind = "migration"
+service = "inventory"
+author = "marta"
+title = "inventory: add reorder threshold to stock (migration 0004)"
+restart = ["inventory"]
+culprit = true
+edits = [
+  { path = "config/inventory.toml", old = 'version = "2.0.6"', new = 'version = "2.0.7"' },
+  { path = "migrations/0004_stock_reorder_threshold.sql", new = """-- Add a reorder threshold per stock row. SQLite cannot add a column with a CHECK
+-- constraint in place, so the table is rebuilt.
+CREATE TABLE stock_new (
+    sku TEXT NOT NULL,
+    warehouse TEXT NOT NULL,
+    qty INTEGER NOT NULL,
+    reorder_at INTEGER NOT NULL DEFAULT 100 CHECK (reorder_at >= 0)
+);
+INSERT INTO stock_new (sku, warehouse, qty) SELECT sku, warehouse, qty FROM stock;
+DROP TABLE stock;
+ALTER TABLE stock_new RENAME TO stock;
+""" },
+]
+
+[[events]]
+at_s = 24
+kind = "config"
+service = "payments"
+author = "rui"
+title = "payments: rotate provider region label"
+restart = ["payments-a", "payments-b"]
+edits = [
+  { path = "config/payments.toml", old = 'version = "3.0.2"', new = 'version = "3.0.3"' },
+]
+
+[ground_truth]
+service = "inventory"
+category = "slow_query"
+change = "culprit"
+explanation = "Migration 0004 rebuilt the stock table and did not recreate its indexes (DROP TABLE drops them). Reservation lookups and updates by sku now scan the 1M-row table, and the updates hold the write lock while scanning."
+
+[[reference_fix]]
+path = "migrations/0005_restore_stock_indexes.sql"
+new = """CREATE INDEX idx_stock_sku_warehouse ON stock (sku, warehouse);
+CREATE INDEX idx_stock_warehouse_sku ON stock (warehouse, sku);
+"""

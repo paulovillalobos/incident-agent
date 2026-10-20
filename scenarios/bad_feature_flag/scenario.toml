@@ -1,0 +1,50 @@
+name = "bad_feature_flag"
+title = "Checkout 5xx after a tax feature flag was enabled"
+duration_s = 45
+
+[[events]]
+at_s = 7
+kind = "config"
+service = "payments"
+author = "rui"
+title = "payments: document provider timeout"
+restart = ["payments-a", "payments-b"]
+edits = [
+  { path = "config/payments.toml", old = 'version = "3.0.2"', new = 'version = "3.0.3"' },
+  { path = "config/payments.toml", old = "provider_timeout_ms = 5000", new = "provider_timeout_ms = 5000  # provider SLA is 2s p99" },
+]
+
+[[events]]
+at_s = 13
+kind = "flag"
+service = "orders"
+author = "sofia"
+title = "orders: enable tax_v2 regional VAT calculation"
+restart = ["orders"]
+culprit = true
+edits = [
+  { path = "config/orders.toml", old = 'version = "1.7.3"', new = 'version = "1.7.4"' },
+  { path = "config/orders.toml", old = "tax_v2 = false", new = "tax_v2 = true" },
+]
+
+[[events]]
+at_s = 22
+kind = "config"
+service = "worker"
+author = "ines"
+title = "worker: bump version after dependency update"
+restart = ["worker"]
+edits = [
+  { path = "config/worker.toml", old = 'version = "1.2.0"', new = 'version = "1.2.1"' },
+]
+
+[ground_truth]
+service = "orders"
+category = "bad_feature_flag"
+change = "culprit"
+explanation = "tax_v2 looks up VAT by region but VAT_BY_REGION has no entry for PT-20 and PT-30 (Azores, Madeira), so those orders raise KeyError and return 500."
+
+[[reference_fix]]
+path = "config/orders.toml"
+old = "tax_v2 = true"
+new = "tax_v2 = false"

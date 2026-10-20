@@ -1,0 +1,47 @@
+name = "replica_disk_full"
+title = "Half of payments fail on one replica"
+duration_s = 45
+
+[[events]]
+at_s = 7
+kind = "config"
+service = "orders"
+author = "joao"
+title = "orders: annotate pool settings"
+restart = ["orders"]
+edits = [
+  { path = "config/orders.toml", old = 'version = "1.7.3"', new = 'version = "1.7.4"' },
+  { path = "config/orders.toml", old = "acquire_timeout_ms = 500", new = "acquire_timeout_ms = 500  # fail fast under saturation" },
+]
+
+[[events]]
+at_s = 13
+kind = "ops"
+service = "payments"
+title = "nightly audit export on payments-b (scheduled job, not a change)"
+action = "audit_export"
+params = { instance = "payments-b", megabytes = 16 }
+culprit = true
+
+[[events]]
+at_s = 21
+kind = "deploy"
+service = "payments"
+author = "rui"
+title = "payments 3.0.3: provider SDK patch release"
+restart = ["payments-a", "payments-b"]
+edits = [
+  { path = "config/payments.toml", old = 'version = "3.0.2"', new = 'version = "3.0.3"' },
+]
+
+[ground_truth]
+service = "payments"
+accept_services = ["payments", "payments-b"]
+category = "replica_failure"
+change = "none"
+explanation = "The audit export filled the payments-b ledger volume to its 16 MB quota; every ledger insert on payments-b fails with 'database or disk is full', so about half of all payments fail. payments-a is healthy."
+
+[[reference_fix]]
+path = "config/orders.toml"
+old = 'replicas = ["payments-a", "payments-b"]'
+new = 'replicas = ["payments-a"]'

@@ -1,0 +1,46 @@
+name = "retry_storm"
+title = "Inventory overload after the orders retry policy changed"
+duration_s = 45
+
+[[events]]
+at_s = 7
+kind = "deploy"
+service = "gateway"
+author = "deploy-bot"
+title = "gateway: rebuild on patched base image"
+restart = ["gateway"]
+edits = [
+  { path = "config/gateway.toml", old = 'version = "2.2.4"', new = 'version = "2.2.5"' },
+]
+
+[[events]]
+at_s = 13
+kind = "config"
+service = "orders"
+author = "joao"
+title = "orders: fail fast and retry inventory calls"
+restart = ["orders"]
+culprit = true
+edits = [
+  { path = "config/orders.toml", old = 'version = "1.7.3"', new = 'version = "1.7.4"' },
+  { path = "config/orders.toml", old = """timeout_ms = 1000
+retries = 2
+backoff_ms = 100""", new = """timeout_ms = 30
+retries = 8
+backoff_ms = 0""" },
+]
+
+[ground_truth]
+service = "orders"
+category = "retry_storm"
+change = "culprit"
+explanation = "orders now times out inventory calls after 30ms (close to inventory's normal latency) and retries 8 times with no backoff. Abandoned requests keep running in inventory, inflight grows until it sheds load, and every rejection is retried immediately."
+
+[[reference_fix]]
+path = "config/orders.toml"
+old = """timeout_ms = 30
+retries = 8
+backoff_ms = 0"""
+new = """timeout_ms = 1000
+retries = 2
+backoff_ms = 100"""

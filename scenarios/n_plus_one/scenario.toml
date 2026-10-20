@@ -1,0 +1,114 @@
+name = "n_plus_one"
+title = "Reservation latency after an inventory refactor"
+duration_s = 45
+
+[[events]]
+at_s = 6
+kind = "config"
+service = "payments"
+author = "rui"
+title = "payments: bump version for audit"
+restart = ["payments-a", "payments-b"]
+edits = [
+  { path = "config/payments.toml", old = 'version = "3.0.2"', new = 'version = "3.0.3"' },
+]
+
+[[events]]
+at_s = 12
+kind = "deploy"
+service = "inventory"
+author = "marta"
+title = "inventory 2.1.0: move availability into per-warehouse repository calls"
+restart = ["inventory"]
+culprit = true
+edits = [
+  { path = "config/inventory.toml", old = 'version = "2.0.6"', new = 'version = "2.1.0"' },
+  { path = "services/inventory/repository.py", old = '''    rows = db.query(
+        conn,
+        "SELECT s.warehouse, w.region, s.qty - COALESCE(h.held, 0) FROM stock AS s"
+        " JOIN warehouses AS w ON w.id = s.warehouse"
+        " LEFT JOIN holds AS h ON h.sku = s.sku AND h.warehouse = s.warehouse"
+        " WHERE s.sku = ?",
+        (sku,),
+        db_name="inventory",
+        rtt_ms=rtt_ms,
+    )
+    return [
+        {"warehouse": w, "region": r, "available": a, "eta_days": 1 if r == "PT" else 3}
+        for w, r, a in rows
+    ]
+''', new = '''    warehouses = db.query(
+        conn, "SELECT id, region FROM warehouses ORDER BY id", db_name="inventory", rtt_ms=rtt_ms
+    )
+    result = []
+    for warehouse, region in warehouses:
+        stock = db.query(
+            conn,
+            "SELECT s.qty - COALESCE(h.held, 0) FROM stock AS s"
+            " LEFT JOIN holds AS h ON h.sku = s.sku AND h.warehouse = s.warehouse"
+            " WHERE s.sku = ? AND s.warehouse = ?",
+            (sku, warehouse),
+            db_name="inventory",
+            rtt_ms=rtt_ms,
+        )
+        if stock:
+            eta = 1 if region == "PT" else 3
+            result.append({"warehouse": warehouse, "region": region, "available": stock[0][0], "eta_days": eta})
+    return result
+''' },
+]
+
+[[events]]
+at_s = 22
+kind = "config"
+service = "orders"
+author = "joao"
+title = "orders: annotate pool settings"
+restart = ["orders"]
+edits = [
+  { path = "config/orders.toml", old = 'version = "1.7.3"', new = 'version = "1.7.4"' },
+  { path = "config/orders.toml", old = "acquire_timeout_ms = 500", new = "acquire_timeout_ms = 500  # fail fast under saturation" },
+]
+
+[ground_truth]
+service = "inventory"
+category = "n_plus_one_query"
+change = "culprit"
+explanation = "inventory 2.1.0 replaced one joined query with one query per warehouse (101 round trips per reservation), so reservation latency and span count per trace jump."
+
+[[reference_fix]]
+path = "services/inventory/repository.py"
+old = '''    warehouses = db.query(
+        conn, "SELECT id, region FROM warehouses ORDER BY id", db_name="inventory", rtt_ms=rtt_ms
+    )
+    result = []
+    for warehouse, region in warehouses:
+        stock = db.query(
+            conn,
+            "SELECT s.qty - COALESCE(h.held, 0) FROM stock AS s"
+            " LEFT JOIN holds AS h ON h.sku = s.sku AND h.warehouse = s.warehouse"
+            " WHERE s.sku = ? AND s.warehouse = ?",
+            (sku, warehouse),
+            db_name="inventory",
+            rtt_ms=rtt_ms,
+        )
+        if stock:
+            eta = 1 if region == "PT" else 3
+            result.append({"warehouse": warehouse, "region": region, "available": stock[0][0], "eta_days": eta})
+    return result
+'''
+new = '''    rows = db.query(
+        conn,
+        "SELECT s.warehouse, w.region, s.qty - COALESCE(h.held, 0) FROM stock AS s"
+        " JOIN warehouses AS w ON w.id = s.warehouse"
+        " LEFT JOIN holds AS h ON h.sku = s.sku AND h.warehouse = s.warehouse"
+        " WHERE s.sku = ?",
+        (sku,),
+        db_name="inventory",
+        rtt_ms=rtt_ms,
+    )
+    return [
+        {"warehouse": w, "region": r, "available": a, "eta_days": 1 if r == "PT" else 3}
+        for w, r, a in rows
+    ]
+'''
