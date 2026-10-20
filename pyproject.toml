@@ -65,4 +65,5 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["-m", "not smoke"]
 markers = ["smoke: starts the real system (slow, ~1 min)"]
