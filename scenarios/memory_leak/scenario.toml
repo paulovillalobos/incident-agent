@@ -25,6 +25,8 @@ _order_snapshots: dict[str, dict[str, Any]] = {}
             "reservation": reservation,
             "charge": charge.json(),
             "reservation_raw": reserve.text,
+            # Per-warehouse view so the status page can show where stock came from.
+            "by_warehouse": {str(w["warehouse"]): dict(w) for w in reservation["availability"]},
         }
 """ },
 ]
@@ -54,6 +56,8 @@ old = """        _order_snapshots[order_id] = {
             "reservation": reservation,
             "charge": charge.json(),
             "reservation_raw": reserve.text,
+            # Per-warehouse view so the status page can show where stock came from.
+            "by_warehouse": {str(w["warehouse"]): dict(w) for w in reservation["availability"]},
         }
 """
 new = ""

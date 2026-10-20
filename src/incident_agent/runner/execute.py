@@ -312,6 +312,7 @@ def run(
                     "service": gt.service,
                     "accept_services": list(gt.accept_services),
                     "category": gt.category,
+                    "accept_categories": list(gt.accept_categories),
                     "change_ids": culprit_ids if gt.change == "culprit" else [],
                     "explanation": gt.explanation,
                 },

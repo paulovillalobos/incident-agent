@@ -1,6 +1,8 @@
 name = "slow_query_migration"
 title = "Reservation latency after a schema migration"
 duration_s = 45
+# Peak-hour traffic: the healthy system serves it with p95 under 200 ms.
+rate = 40
 
 [[events]]
 at_s = 7

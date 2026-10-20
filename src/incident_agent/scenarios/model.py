@@ -60,6 +60,8 @@ class GroundTruth:
     accept_services: tuple[str, ...]
     change: str  # "culprit" or "none"
     fix_check: str = "rerun"
+    # Incidents that genuinely fit two categories accept both (documented in the README).
+    accept_categories: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -115,6 +117,7 @@ def load(path: Path) -> Scenario:
             accept_services=tuple(gt.get("accept_services", [gt["service"]])),
             change=gt.get("change", "culprit"),
             fix_check=gt.get("fix_check", "rerun"),
+            accept_categories=tuple(gt.get("accept_categories", [gt["category"]])),
         ),
         reference_fix=_edits(data.get("reference_fix", [])),
         path=path,

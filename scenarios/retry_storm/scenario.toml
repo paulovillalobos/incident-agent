@@ -25,7 +25,7 @@ edits = [
   { path = "config/orders.toml", old = 'version = "1.7.3"', new = 'version = "1.7.4"' },
   { path = "config/orders.toml", old = """timeout_ms = 1000
 retries = 2
-backoff_ms = 100""", new = """timeout_ms = 30
+backoff_ms = 100""", new = """timeout_ms = 10
 retries = 8
 backoff_ms = 0""" },
 ]
@@ -33,12 +33,15 @@ backoff_ms = 0""" },
 [ground_truth]
 service = "orders"
 category = "retry_storm"
+# The 10 ms timeout alone fails most calls; the retries multiply inventory load 9x. Both
+# readings name the same service and change, so both categories are accepted.
+accept_categories = ["retry_storm", "timeout_misconfiguration"]
 change = "culprit"
-explanation = "orders now times out inventory calls after 30ms (close to inventory's normal latency) and retries 8 times with no backoff. Abandoned requests keep running in inventory, inflight grows until it sheds load, and every rejection is retried immediately."
+explanation = "orders now times out inventory calls after 10ms, below inventory's median latency (about 13ms), and retries 8 times with no backoff. Most calls are attempted several times, abandoned attempts keep running in inventory, its in-flight limit starts shedding, and every rejection is retried immediately."
 
 [[reference_fix]]
 path = "config/orders.toml"
-old = """timeout_ms = 30
+old = """timeout_ms = 10
 retries = 8
 backoff_ms = 0"""
 new = """timeout_ms = 1000

@@ -40,6 +40,8 @@ def test_ground_truth_is_consistent(scenario: scenarios.Scenario) -> None:
     else:
         assert culprit is None or not culprit.recorded
     assert gt.service in gt.accept_services
+    assert gt.category in gt.accept_categories
+    assert set(gt.accept_categories) <= set(scenarios.CATEGORIES)
     # Every scenario has at least one decoy change so "blame the latest deploy" can fail.
     assert sum(1 for e in scenario.events if e.recorded and not e.culprit) >= 1
 

@@ -56,7 +56,7 @@ def score(
     rc = report["root_cause"]
     accept_services = {_norm(s) for s in truth["accept_services"]}
     out["service_ok"] = _norm(rc["service"]) in accept_services
-    out["category_ok"] = rc["category"] == truth["category"]
+    out["category_ok"] = rc["category"] in truth.get("accept_categories", [truth["category"]])
     change = _norm(rc.get("change_id"))
     out["change_ok"] = (
         change in {_norm(c) for c in truth["change_ids"]} if truth["change_ids"] else not change
