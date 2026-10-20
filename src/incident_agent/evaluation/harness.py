@@ -118,6 +118,13 @@ def investigate_all(
         del model
 
 
+def executed_tool_calls(record: dict[str, Any]) -> int:
+    """Tool calls that ran (not submissions, not calls refused because the budget was spent)."""
+    return sum(
+        1 for st in record["steps"] if st["tool"] != "submit_report" and st["error"] != "budget"
+    )
+
+
 def load_records() -> list[dict[str, Any]]:
     return [json.loads(p.read_text()) for p in sorted(INVESTIGATIONS.glob("*/*/r*.json"))]
 
@@ -191,7 +198,7 @@ def score_all() -> list[dict[str, Any]]:
             scenario=record["scenario"],
             replicate=record["replicate"],
             fix_verified=fix_verified,
-            tool_calls=record["tool_calls"],
+            tool_calls=executed_tool_calls(record),
             turns=record["turns"],
             input_tokens=record["usage"]["input_tokens"],
             output_tokens=record["usage"]["output_tokens"],

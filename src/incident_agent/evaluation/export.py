@@ -129,6 +129,7 @@ def export(out_dir: Path, replicate: int = 1) -> list[Path]:
             continue
         snapshot = harness.snapshot_dir(record["scenario"], record["replicate"])
         conn = store.open_readonly(snapshot / "telemetry.db")
+        record["tool_calls"] = harness.executed_tool_calls(record)
         report = record["report"]
         meta = dict(conn.execute("SELECT key, value FROM run_meta").fetchall())
         evidence = (
@@ -171,7 +172,7 @@ def export(out_dir: Path, replicate: int = 1) -> list[Path]:
                 "status": record["status"],
                 "root_cause_correct": bool(score.get("root_cause_correct")),
                 "fix_verified": score.get("fix_verified"),
-                "tool_calls": record["tool_calls"],
+                "tool_calls": harness.executed_tool_calls(record),
                 "seconds": record["seconds"],
             }
         )
