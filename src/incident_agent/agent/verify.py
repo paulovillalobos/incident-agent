@@ -64,7 +64,7 @@ def check_reference(ref: str, conn: sqlite3.Connection, tree: Path) -> str | Non
         row = conn.execute("SELECT 1 FROM metric_points WHERE name = ? LIMIT 1", (name,)).fetchone()
     elif kind == "file":
         path, _, line = value.partition(":")
-        rel = PurePosixPath(path.lstrip("./"))
+        rel = PurePosixPath(path.removeprefix("./"))
         if ".." in rel.parts or rel.is_absolute():
             return "path outside the system tree"
         target = tree / rel

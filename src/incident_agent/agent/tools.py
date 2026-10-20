@@ -569,6 +569,8 @@ def run_sql(ctx: ToolContext, a: SqlArgs) -> dict[str, Any]:
         try:
             cursor = ctx.conn.execute(query)
         except sqlite3.DatabaseError as exc:
+            if "interrupted" in str(exc):
+                raise  # the deadline turns this into a clear "cancelled" error
             raise ToolError(f"{type(exc).__name__}: {exc}") from exc
         rows = cursor.fetchmany(51)
     columns = [d[0] for d in cursor.description or []]
