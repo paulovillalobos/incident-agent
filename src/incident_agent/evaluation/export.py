@@ -22,6 +22,7 @@ def _redact(text: str) -> str:
     """Replace absolute local paths (stack traces in recorded logs) with repo-relative ones."""
     return text.replace(_REPO_ROOT, ".").replace(str(Path.home()), "~")
 
+
 MAX_TRACE_SPANS = 250
 
 
