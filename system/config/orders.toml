@@ -1,0 +1,22 @@
+# orders: order creation, tax, inventory reservation, payment, fulfilment message
+version = "1.7.3"
+memory_limit_mb = 130
+
+[db]
+pool_size = 10
+acquire_timeout_ms = 500
+rtt_ms = 2
+
+[flags]
+tax_v2 = false
+
+[inventory]
+timeout_ms = 1000
+retries = 2
+backoff_ms = 100
+retry_timeouts = true
+
+[payments]
+timeout_ms = 5000
+retries = 0
+replicas = ["payments-a", "payments-b"]

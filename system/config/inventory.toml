@@ -1,0 +1,10 @@
+# inventory: stock lookup and reservation
+version = "2.0.6"
+log_level = "INFO"
+
+[db]
+rtt_ms = 2
+
+[limits]
+max_inflight = 24
+base_work_ms = 4

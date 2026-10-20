@@ -1,0 +1,6 @@
+# worker: consumes fulfilment messages from the queue
+version = "1.2.0"
+poll_interval_ms = 50
+batch_size = 1
+# 0 means unlimited redelivery
+max_attempts = 0

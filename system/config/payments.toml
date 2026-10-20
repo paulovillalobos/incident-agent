@@ -1,0 +1,8 @@
+# payments: charges through the external payment provider, writes the ledger
+version = "3.0.2"
+provider_region = "eu1"
+provider_timeout_ms = 5000
+volume_quota_mb = 16
+
+[db]
+rtt_ms = 2

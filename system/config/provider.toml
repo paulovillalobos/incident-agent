@@ -1,0 +1,4 @@
+# Stand-in for the external payment provider (not our code, not instrumented)
+version = "external"
+median_ms = 45
+sigma = 0.55

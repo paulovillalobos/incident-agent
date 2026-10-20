@@ -1,0 +1,8 @@
+# gateway: public checkout API
+version = "2.2.4"
+
+[orders]
+timeout_ms = 3000
+retries = 0
+connect_retries = 4
+connect_backoff_ms = 400
