@@ -178,3 +178,10 @@ def test_unknown_names_and_ids_say_what_exists(ctx: ToolContext) -> None:
     with pytest.raises(ToolError, match=CULPRIT):
         run_tool(ctx, "list_changes", {"change_id": "2023-10-05-123456"})
     assert "pool_size" in run_tool(ctx, "read_file", {"path": "a/config/orders.toml"})["content"]
+
+
+def test_malformed_or_unknown_arguments_are_errors_not_ignored(ctx: ToolContext) -> None:
+    with pytest.raises(ToolError, match="must be a JSON object"):
+        run_tool(ctx, "search_logs", {"_raw": "service:orders severity:ERROR"})
+    with pytest.raises(ToolError, match="servce"):
+        run_tool(ctx, "search_logs", {"servce": "orders"})

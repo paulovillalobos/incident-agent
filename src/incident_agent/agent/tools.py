@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from incident_agent.agent.messages import ToolSpec
 from incident_agent.telemetry import store
@@ -126,11 +126,17 @@ def _flag(body: str) -> dict[str, str]:
 # ---------------------------------------------------------------- argument models
 
 
-class NoArgs(BaseModel):
+class Args(BaseModel):
+    """Unknown argument names are errors, so a typo is reported instead of silently ignored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class NoArgs(Args):
     pass
 
 
-class SpanStatsArgs(BaseModel):
+class SpanStatsArgs(Args):
     group_by: Literal["service", "name", "instance", "version", "time"] = Field(
         default="service", description="Dimension to group by; 'time' gives a time series"
     )
@@ -142,7 +148,7 @@ class SpanStatsArgs(BaseModel):
     end: str | None = Field(default=None, description="UTC HH:MM:SS")
 
 
-class SearchSpansArgs(BaseModel):
+class SearchSpansArgs(Args):
     service: str | None = None
     name: str | None = Field(default=None, description="Span name contains this text")
     status: Literal["error", "ok"] | None = None
@@ -154,11 +160,11 @@ class SearchSpansArgs(BaseModel):
     limit: int = Field(default=10, ge=1, le=25)
 
 
-class GetTraceArgs(BaseModel):
+class GetTraceArgs(Args):
     trace_id: str = Field(description="32 hex characters")
 
 
-class SearchLogsArgs(BaseModel):
+class SearchLogsArgs(Args):
     contains: str | None = Field(
         default=None, description="Case-insensitive substring of the log body"
     )
@@ -177,7 +183,7 @@ class SearchLogsArgs(BaseModel):
     limit: int = Field(default=15, ge=1, le=40)
 
 
-class MetricArgs(BaseModel):
+class MetricArgs(Args):
     name: str | None = Field(
         default=None, description="Metric name; omit to list available metrics"
     )
@@ -186,11 +192,11 @@ class MetricArgs(BaseModel):
     bucket_s: int = Field(default=5, ge=1, le=60)
 
 
-class ChangesArgs(BaseModel):
+class ChangesArgs(Args):
     change_id: str | None = Field(default=None, description="Show the full diff of this change")
 
 
-class ReadFileArgs(BaseModel):
+class ReadFileArgs(Args):
     path: str = Field(
         description="Path inside the system tree, e.g. config/orders.toml; '.' lists the tree"
     )
@@ -198,7 +204,7 @@ class ReadFileArgs(BaseModel):
     end_line: int | None = Field(default=None, ge=1)
 
 
-class SqlArgs(BaseModel):
+class SqlArgs(Args):
     query: str = Field(
         description="One read-only SELECT over tables spans, logs, metric_points, changes"
         " (max 50 rows)"
@@ -707,6 +713,8 @@ def run_tool(ctx: ToolContext, name: str, arguments: dict[str, Any]) -> dict[str
     tool = TOOLS_BY_NAME.get(name)
     if tool is None:
         raise ToolError(f"unknown tool {name!r}; available: {', '.join(TOOLS_BY_NAME)}")
+    if "_raw" in arguments:
+        raise ToolError(f"arguments for {name} must be a JSON object, got {arguments['_raw']!r}")
     try:
         args = tool.args.model_validate(arguments)
     except Exception as exc:
