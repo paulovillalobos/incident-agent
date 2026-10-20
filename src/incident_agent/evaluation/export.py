@@ -119,13 +119,13 @@ def waterfall(trace_id: str, conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [s for (sid,) in rows if (s := _span(conn, sid))]
 
 
-def export(out_dir: Path, replicate: int = 1) -> list[Path]:
+def export(out_dir: Path, replicate: int | None = None) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     scores = {(r["backend"], r["scenario"], r["replicate"]): r for r in harness.score_all()}
     index: list[dict[str, Any]] = []
     written: list[Path] = []
     for record in harness.load_records():
-        if record["replicate"] != replicate:
+        if replicate is not None and record["replicate"] != replicate:
             continue
         snapshot = harness.snapshot_dir(record["scenario"], record["replicate"])
         conn = store.open_readonly(snapshot / "telemetry.db")
@@ -176,7 +176,7 @@ def export(out_dir: Path, replicate: int = 1) -> list[Path]:
                 "seconds": record["seconds"],
             }
         )
-    index.sort(key=lambda r: (r["scenario"], r["backend"]))
+    index.sort(key=lambda r: (r["scenario"], r["backend"], r["replicate"]))
     (out_dir / "index.json").write_text(json.dumps(index, indent=1))
     return written
 

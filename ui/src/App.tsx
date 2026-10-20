@@ -86,7 +86,9 @@ export function App() {
                   className={`nav-item${e.id === current ? " active" : ""}`}
                   onClick={() => setCurrent(e.id)}
                 >
-                  <span>{e.backend}</span>
+                  <span className="nav-label">
+                    {e.backend.replace(/^mlx:/, "")} · r{e.replicate}
+                  </span>
                   <span className={e.root_cause_correct ? "good-text" : "bad"}>
                     {e.root_cause_correct ? "correct" : e.status === "accepted" ? "wrong" : e.status}
                   </span>
