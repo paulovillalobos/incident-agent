@@ -100,3 +100,24 @@ def test_model_style_diff_without_exact_line_numbers_applies(snapshot: Snapshot)
 
     shutil.copytree(snapshot.tree, copy, dirs_exist_ok=True)
     assert patching.apply_diff(copy, sloppy + "\n") == ["config/orders.toml"]
+
+
+def test_commentary_after_a_reference_is_dropped_but_the_id_is_still_checked(
+    snapshot: Snapshot, ro: sqlite3.Connection
+) -> None:
+    report = make_report(
+        snapshot,
+        evidence=[
+            f"span:{snapshot.error_span}: pool acquire timed out after 500ms",
+            "LOG:999999 (could not acquire)",
+            "orders pool is small",
+        ],
+    )
+    parsed = Report.model_validate(report)
+    assert parsed.root_cause.evidence == [
+        f"span:{snapshot.error_span}",
+        "log:999999",
+        "orders pool is small",
+    ]
+    result = verify(parsed, ro, snapshot.tree)
+    assert {ref for ref, _ in result.invalid} == {"log:999999", "orders pool is small"}

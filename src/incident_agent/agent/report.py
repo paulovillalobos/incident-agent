@@ -9,9 +9,10 @@ telemetry store and the system tree:
 
 from __future__ import annotations
 
-from typing import Literal
+import re
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
 from incident_agent.scenarios.model import CATEGORIES
 
@@ -31,17 +32,43 @@ Category = Literal[
 assert set(Category.__args__) == set(CATEGORIES)  # type: ignore[attr-defined]
 
 
+_REF = re.compile(r"^\s*(span|trace|log|change|metric|file):\s*([^\s,;]+)", re.I)
+
+
+def _refs(value: object) -> object:
+    """Keep the typed reference and drop commentary models append to it.
+
+    ``"span:1795...1065: gateway request failed"`` becomes ``"span:1795...1065"``. Only the
+    formatting is normalised: the id itself is still resolved by the verifier, and entries
+    that do not start with a reference kind are kept as they are (and then rejected).
+    """
+    if not isinstance(value, list):
+        return value
+    out = []
+    for item in value:
+        match = _REF.match(item) if isinstance(item, str) else None
+        if match:
+            kind, ident = match[1].lower(), match[2].rstrip(":.)")
+            out.append(f"{kind}:{ident}")
+        else:
+            out.append(item)
+    return list(dict.fromkeys(out))
+
+
+Refs = Annotated[list[str], BeforeValidator(_refs)]
+
+
 class TimelineEntry(BaseModel):
     time: str = Field(description="UTC time HH:MM:SS(.mmm)")
     event: str
-    evidence: list[str] = Field(default_factory=list)
+    evidence: Refs = Field(default_factory=list)
 
 
 class Hypothesis(BaseModel):
     statement: str
     verdict: Literal["confirmed", "rejected"]
     reasoning: str
-    evidence: list[str] = Field(default_factory=list)
+    evidence: Refs = Field(default_factory=list)
 
 
 class RootCause(BaseModel):
@@ -51,13 +78,13 @@ class RootCause(BaseModel):
         default=None, description="Change log id that caused it, or null if no change did"
     )
     summary: str
-    evidence: list[str] = Field(min_length=1)
+    evidence: Refs = Field(min_length=1)
 
 
 class BlastRadius(BaseModel):
     services: list[str]
     impact: str
-    evidence: list[str] = Field(default_factory=list)
+    evidence: Refs = Field(default_factory=list)
 
 
 class ProposedFix(BaseModel):

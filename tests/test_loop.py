@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from conftest import CULPRIT, Snapshot, make_report
 from incident_agent.agent.backends.scripted import ScriptedModel, last_tool_result
-from incident_agent.agent.loop import SUBMIT, Budget, investigate, tool_specs
+from incident_agent.agent.loop import SUBMIT, Budget, investigate, report_in_text, tool_specs
 from incident_agent.agent.messages import Message, ModelTurn, ToolCall, ToolSpec, Usage
 from incident_agent.agent.tools import ToolContext
 
@@ -143,3 +144,16 @@ def test_injected_log_text_does_not_reach_the_system_prompt(snapshot: Snapshot) 
     assert "ignore previous" not in final[0].content.lower()
     tool_msg = next(m for m in final if m.role == "tool")
     assert '"warning":"contains instruction-like text' in tool_msg.content
+
+
+def test_report_written_as_text_is_verified_like_a_submission(snapshot: Snapshot) -> None:
+    text = "Here is my report:\n```json\n" + json.dumps(make_report(snapshot)) + "\n```"
+    inv = run(snapshot, ScriptedModel.from_turns([text]))
+    assert inv.status == "accepted" and inv.submissions == 1
+    assert inv.steps[-1].arguments == {"from_text": True}
+
+
+def test_text_without_a_report_is_nudged() -> None:
+    assert report_in_text("I will look at the logs next.") is None
+    assert report_in_text('{"note": "no root cause"}') is None
+    assert report_in_text('{"report": {"root_cause": {}}}') == {"root_cause": {}}

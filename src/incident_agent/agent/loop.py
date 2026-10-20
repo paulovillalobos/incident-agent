@@ -8,6 +8,7 @@ one revision round) and identical across the scripted, local and hosted backends
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -93,6 +94,26 @@ def tool_specs() -> list[ToolSpec]:
     return specs
 
 
+def report_in_text(text: str) -> dict[str, Any] | None:
+    """A report written as JSON in the reply instead of a ``submit_report`` call.
+
+    Small local models often do this. The JSON is taken from a fenced block or from the
+    outermost braces, and treated as a submission only if it has a ``root_cause``; it then
+    goes through exactly the same validation and verification as a tool call.
+    """
+    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.S)
+    candidate = fenced.group(1) if fenced else text[text.find("{") : text.rfind("}") + 1]
+    if not candidate:
+        return None
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict) and isinstance(parsed.get("report"), dict):
+        parsed = parsed["report"]
+    return parsed if isinstance(parsed, dict) and "root_cause" in parsed else None
+
+
 def _submit(
     ctx: ToolContext, inv: Investigation, call: ToolCall, budget: Budget
 ) -> tuple[str, bool]:
@@ -156,9 +177,17 @@ def investigate(
             if turn.text:
                 inv.final_text = turn.text
             if not turn.tool_calls:
-                messages.append(
-                    Message("user", prompts.BUDGET_EXHAUSTED if exhausted else prompts.NUDGE)
-                )
+                written = report_in_text(turn.text)
+                if written is None:
+                    messages.append(
+                        Message("user", prompts.BUDGET_EXHAUSTED if exhausted else prompts.NUDGE)
+                    )
+                    continue
+                call = ToolCall(f"text_{inv.turns}", SUBMIT, {"report": written})
+                output, finished = _submit(ctx, inv, call, budget)
+                inv.steps.append(Step(len(inv.steps) + 1, SUBMIT, {"from_text": True}, output, 0.0))
+                if not finished:
+                    messages.append(Message("user", prompts.TEXT_REPORT + "\n" + output))
                 continue
             for call in turn.tool_calls:
                 t0 = time.perf_counter()

@@ -46,3 +46,7 @@ BUDGET_EXHAUSTED = (
     "The tool budget is exhausted. Call submit_report now with the evidence you already have."
 )
 NUDGE = "Continue the investigation with a tool call, or call submit_report when you are done."
+TEXT_REPORT = (
+    "Your reply contained a report as text. It was checked as if submitted; use the "
+    "submit_report tool next time. Verification result:"
+)

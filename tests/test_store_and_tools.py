@@ -157,3 +157,16 @@ def test_open_readonly_requires_existing_file(tmp_path: object) -> None:
 
     with pytest.raises(FileNotFoundError):
         store.open_readonly(Path(str(tmp_path)) / "missing.db")
+
+
+@pytest.mark.parametrize(
+    "value", ["08:53:20", "08:53:20:00", "08:53:20Z", "2025-10-09T08:53:20", "08:53:20 UTC"]
+)
+def test_time_arguments_are_parsed_leniently(ctx: ToolContext, value: str) -> None:
+    assert ctx.parse_time(value, 0) % (86400 * 10**9) == (8 * 3600 + 53 * 60 + 20) * 10**9
+
+
+@pytest.mark.parametrize("value", ["yesterday", "25:00", "08:61"])
+def test_unparseable_times_are_tool_errors(ctx: ToolContext, value: str) -> None:
+    with pytest.raises(ToolError):
+        ctx.parse_time(value, 0)
