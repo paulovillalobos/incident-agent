@@ -67,3 +67,8 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 addopts = ["-m", "not smoke"]
 markers = ["smoke: starts the real system (slow, ~1 min)"]
+
+[[tool.mypy.overrides]]
+# mlx-lm is only installed on Apple silicon; its ignore is unused elsewhere (CI on Linux).
+module = ["incident_agent.agent.backends.mlx_backend"]
+warn_unused_ignores = false
