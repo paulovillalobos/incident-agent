@@ -15,6 +15,13 @@ from typing import Any
 from incident_agent.evaluation import harness
 from incident_agent.telemetry import store
 
+_REPO_ROOT = str(Path(__file__).resolve().parents[3])
+
+
+def _redact(text: str) -> str:
+    """Replace absolute local paths (stack traces in recorded logs) with repo-relative ones."""
+    return text.replace(_REPO_ROOT, ".").replace(str(Path.home()), "~")
+
 MAX_TRACE_SPANS = 250
 
 
@@ -160,7 +167,7 @@ def export(out_dir: Path, replicate: int | None = None) -> list[Path]:
         }
         conn.close()
         path = out_dir / f"{doc['id']}.json"
-        path.write_text(json.dumps(doc, default=str))
+        path.write_text(_redact(json.dumps(doc, default=str)))
         written.append(path)
         score = doc["score"] or {}
         index.append(
