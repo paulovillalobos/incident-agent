@@ -91,6 +91,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 @media (max-width: 1000px) {
   .layout { grid-template-columns: 1fr; }
-  .sidebar { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--line); }
+  .sidebar { position: static; max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .page { padding: 16px; }
   .grid { grid-template-columns: 1fr; }
 }

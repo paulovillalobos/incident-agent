@@ -44,6 +44,15 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const onHash = () => {
+      const id = window.location.hash.slice(1);
+      if (index.some((e) => e.id === id)) setCurrent(id);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [index]);
+
+  useEffect(() => {
     if (!current) return;
     window.location.hash = current;
     setSelected(null);
