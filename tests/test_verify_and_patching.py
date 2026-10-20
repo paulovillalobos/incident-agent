@@ -79,7 +79,9 @@ def test_make_apply_reverse_roundtrip(tmp_path: Path) -> None:
     assert (tmp_path / "config" / "x.toml").read_text() == original
     patching.apply_diff(tmp_path, diff)
     assert "b = 20" in (tmp_path / "config" / "x.toml").read_text()
-    patching.apply_diff(tmp_path, patching.reverse_diff(diff))
+    rollback = patching.reverse_diff(diff)
+    assert rollback.index("-b = 20") < rollback.index("+b = 2\n")
+    patching.apply_diff(tmp_path, rollback)
     assert (tmp_path / "config" / "x.toml").read_text() == original
 
 

@@ -68,28 +68,40 @@ def make_diff(root: Path, edits: list[Edit]) -> str:
 
 
 def reverse_diff(diff: str) -> str:
-    """Invert a unified diff (the rollback of a change)."""
-    out = []
+    """Invert a unified diff (the rollback of a change), keeping removals before additions."""
+    out: list[str] = []
+    removed: list[str] = []
+    added: list[str] = []
+
+    def flush() -> None:
+        out.extend(removed + added)
+        removed.clear()
+        added.clear()
+
     lines = diff.splitlines()
     i = 0
     while i < len(lines):
         line = lines[i]
         if line.startswith("--- ") and i + 1 < len(lines) and lines[i + 1].startswith("+++ "):
+            flush()
             old, new = line[4:], lines[i + 1][4:]
             out.append("--- " + (new.replace("b/", "a/", 1) if new != "/dev/null" else new))
             out.append("+++ " + (old.replace("a/", "b/", 1) if old != "/dev/null" else old))
             i += 2
             continue
-        if line.startswith("@@"):
-            m = re.match(r"@@ -(\S+) \+(\S+) @@(.*)", line)
-            out.append(f"@@ -{m.group(2)} +{m.group(1)} @@{m.group(3)}" if m else line)
-        elif line.startswith("+"):
-            out.append("-" + line[1:])
+        if line.startswith("+"):
+            removed.append("-" + line[1:])
         elif line.startswith("-"):
-            out.append("+" + line[1:])
+            added.append("+" + line[1:])
         else:
-            out.append(line)
+            flush()
+            if line.startswith("@@"):
+                m = re.match(r"@@ -(\S+) \+(\S+) @@(.*)", line)
+                out.append(f"@@ -{m.group(2)} +{m.group(1)} @@{m.group(3)}" if m else line)
+            else:
+                out.append(line)
         i += 1
+    flush()
     return "\n".join(out) + "\n"
 
 
