@@ -6,32 +6,33 @@ and writes a report with a timeline, the hypotheses it rejected, a root cause wi
 evidence and a proposed fix as a diff. Every citation is checked against the telemetry
 store by code, and every fix that applies is checked by re-running the incident with it.
 
-The project is the evaluation as much as the agent. Ten faults with known root causes
-are injected into a live, OpenTelemetry-instrumented system; a local 4B model (through
-MLX) and two non-LLM baselines investigate the same recorded telemetry; a harness scores
-each report against ground truth without an LLM judge. The numbers below come from that
-harness and are committed in [`results/`](results/).
+I wanted to measure the agent, not demo it. I inject ten faults with known root causes
+into a live, OpenTelemetry-instrumented system, let a local 4B model (through MLX) and two
+non-LLM baselines investigate the same recorded telemetry, and score each report against
+ground truth with code instead of an LLM judge. The numbers below come from that harness
+and are committed in [`results/`](results/).
 
 The short version: the infrastructure works (live system, fault injection, citation
 verification, fix re-runs, controls), and the local 4B model is not good enough to use
 it. It finds the right service in 60% of runs but never the full root cause, and none of
-its diffs apply. A rule-based baseline written for these faults is right 70% of the time.
+its diffs apply. A rule-based baseline I wrote for these faults is right 70% of the time.
 
 ## Results
 
-30 investigations per backend: 10 scenarios × 3 independently recorded replicates.
+I ran 30 investigations per backend: 10 scenarios × 3 independently recorded replicates,
+all on a MacBook Air (Apple M4, 16 GB) in October 2026.
 
 | backend | report accepted | root cause correct (95% CI) | service · category · change right | evidence valid | fix applies | fix verified by re-run | median tool calls | median time |
 |---|---|---|---|---|---|---|---|---|
-| local model: Qwen3-4B-Instruct-2507 (4-bit, MLX) | 17% | 0% (0–11%) | 60% · 40% · 20% | 65% | 0% | 0% | 16 | 228 s |
-| baseline: rules | 100% | 70% (52–83%) | 80% · 80% · 80% | 100% | 90% | 70% | – | 0.1 s |
-| baseline: roll back latest change | 100% | 0% (0–11%) | 40% · 0% · 30% | 100% | 100% | 30% | – | 0.0 s |
+| local model: Qwen3-4B-Instruct-2507 (4-bit, MLX) | 17% | 0% (0-11%) | 60% · 40% · 20% | 65% | 0% | 0% | 16 | 228 s |
+| baseline: rules | 100% | 70% (52-83%) | 80% · 80% · 80% | 100% | 90% | 70% | - | 0.1 s |
+| baseline: roll back latest change | 100% | 0% (0-11%) | 40% · 0% · 30% | 100% | 100% | 30% | - | 0.0 s |
 
-- *Root cause correct* needs an accepted report with the right service, category and
+- Root cause correct needs an accepted report with the right service, category and
   culprit change (or no change, when none caused it). The rollback baseline always answers
   category `other`, so it is never correct by construction; it is there to measure what
   "revert the last deploy" achieves as a fix.
-- *Fix verified*: the proposed diff is applied, the scenario is re-run with the same
+- Fix verified: the proposed diff is applied, the scenario is re-run with the same
   operational faults, and the service level must hold. All ten scenarios fail this check
   without a fix and pass it with their reference fix ([`results/controls.md`](results/controls.md)).
 - The rules baseline's 3/3 on `retry_storm` counts only because that scenario accepts
@@ -39,8 +40,8 @@ its diffs apply. A rule-based baseline written for these faults is right 70% of 
   both cause it; see the scenario file). It answers `timeout_misconfiguration`.
 - Per-scenario results, predicted categories and the prompt-injection table are in
   [`results/summary.md`](results/summary.md); every run is in [`results/runs.jsonl`](results/runs.jsonl).
-- The Claude backend (`--backend anthropic`) is implemented and unit-tested, but no API
-  key was configured for this evaluation, so it has no row.
+- The Claude backend (`--backend anthropic`) is implemented and unit-tested, but I had no
+  API key configured for this evaluation, so it has no row.
 
 | scenario | what happens | local model | rules | rollback |
 |---|---|---|---|---|
@@ -142,36 +143,36 @@ flowchart LR
   EV --> UI[React UI]
 ```
 
-- **System** (`system/`): six Python/FastAPI services with SQLite databases (one million
+- System (`system/`): six Python/FastAPI services with SQLite databases (one million
   stock rows in inventory) and a SQLite-backed fulfilment queue. Each one is instrumented
   with the OpenTelemetry SDK: server/client/database spans, a connection-pool span,
   metrics (pool usage and wait, retries, queue depth, process memory) and logs with trace
   and span ids. Services run as local processes; a supervisor restarts crashed ones and
   writes rollouts and restarts to a `platform` log, as a container platform would.
-- **Telemetry** (`src/incident_agent/telemetry/`): a small OTLP/HTTP receiver (protobuf
+- Telemetry (`src/incident_agent/telemetry/`): a small OTLP/HTTP receiver (protobuf
   decoding with the official `opentelemetry-proto` messages) that writes spans, logs and
-  metric points into one SQLite file per run. An in-repo receiver is used instead of the
-  OpenTelemetry Collector binary so the project runs with `uv sync` and no extra install;
+  metric points into one SQLite file per run. I wrote this receiver instead of running
+  the OpenTelemetry Collector binary so the project runs with `uv sync` and no extra install;
   the services speak standard OTLP and could point at a Collector unchanged.
-- **Scenarios** (`scenarios/*/scenario.toml`): timed events applied to the running
+- Scenarios (`scenarios/*/scenario.toml`): timed events applied to the running
   system under load. Recorded changes are exact text edits to the deployed tree, rendered
   as unified diffs into the change log, followed by a rollout. Operational faults (a
   degraded provider region, a scheduled export that fills a disk) are applied but not
   recorded, as in real life. Every scenario has at least one decoy change. The ground
   truth (service, category, culprit change) is stored next to the snapshot and never
   exposed to the agent's tools.
-- **Alerts** (`src/incident_agent/alerts.py`): four rules computed from the recorded
+- Alerts (`src/incident_agent/alerts.py`): four rules computed from the recorded
   telemetry (checkout 5xx rate, checkout p95, unplanned restart, fulfilment backlog), each
   sustained for 15 s. The page the agent receives is real, not hand-written.
-- **Agent** (`src/incident_agent/agent/`): a plain loop (no framework) over a provider-
+- Agent (`src/incident_agent/agent/`): a plain loop (no framework) over a provider-
   neutral `ChatModel` interface, with three backends: a scripted model for tests and CI,
   a local model through MLX (default `Qwen3-4B-Instruct-2507`, 4-bit), and Claude through
   the Anthropic SDK when `ANTHROPIC_API_KEY` is present in `.env`.
-- **Baselines** (`src/incident_agent/baseline/`): `rollback` blames and reverts the most
+- Baselines (`src/incident_agent/baseline/`): `rollback` blames and reverts the most
   recent change before the alert; `rules` localises the anomaly (deepest failing span per
   trace, or the span kind whose self-time grew most) and picks a category from a table of
   error signatures. Both produce the same report and go through the same verifier.
-- **UI** (`ui/`): React + TypeScript (Vite). Reads exported JSON, no backend.
+- UI (`ui/`): React + TypeScript (Vite). Reads exported JSON, no backend.
 
 ## The agent
 
@@ -202,69 +203,71 @@ blast radius and the fix as a unified diff.
 
 ## Evaluation method
 
-1. **Snapshots.** Each scenario is run 3 times (different load seeds) against the live
+1. Snapshots. Each scenario is run 3 times (different load seeds) against the live
    system: about 45 seconds of checkout traffic at 25 requests/s (40 for
    `slow_query_migration`, peak traffic), with the scenario's
    changes and faults applied on schedule. The run keeps `telemetry.db`, the post-incident
    tree and the ground truth. Every investigation of a given replicate sees the same data.
-2. **Investigations.** Each backend investigates each snapshot once, starting from the
+2. Investigations. Each backend investigates each snapshot once, starting from the
    alert only. Baselines and the agent produce the same report type.
-3. **Scoring** (`evaluation/scoring.py`, no LLM judge):
-   - *root cause correct*: report accepted by the verifier and service, category and
+3. Scoring (`evaluation/scoring.py`, no LLM judge):
+   - root cause correct: report accepted by the verifier and service, category and
      culprit change all match the ground truth (for incidents with no causing change,
      `change_id` must be null);
-   - *evidence valid*: share of cited references that exist;
-   - *evidence relevant*: share of valid telemetry citations that belong to the faulty
+   - evidence valid: share of cited references that exist;
+   - evidence relevant: share of valid telemetry citations that belong to the faulty
      service (or are the culprit change);
-   - *fix applies*: the diff applies to the deployed tree;
-   - *fix verified*: the diff is applied and the scenario re-run with the same operational
+   - fix applies: the diff applies to the deployed tree;
+   - fix verified: the diff is applied and the scenario re-run with the same operational
      faults; the fix passes if, after the fault, checkout 5xx/transport errors stay at or
      below 2%, p95 at or below 400 ms, there are no unplanned restarts and the queue stays
      below 50 messages. Each distinct diff is re-run once and cached.
-4. **Controls.** Every scenario must fail that check without a fix and pass it with its
+4. Controls. Every scenario must fail that check without a fix and pass it with its
    reference fix (`results/controls.md`), otherwise "fix verified" would mean nothing.
-5. **Intervals.** Accuracy has a 95% Wilson interval. With 30 runs per backend the
+5. Intervals. Accuracy has a 95% Wilson interval. With 30 runs per backend the
    intervals are wide; differences of a few points are noise.
 
 ## Limits and failure modes
 
-**Where the local agent is wrong, and why.** From the 30 local-model investigations in
-`runs/` (summarised in `results/`):
+### Where the local agent is wrong, and why
 
-- *Citations.* 25 of 30 reports are rejected. The invalid references are mostly tool names
+From the 30 local-model investigations in `runs/` (summarised in `results/`):
+
+- Citations. 25 of 30 reports are rejected. The invalid references are mostly tool names
   with numbers (`span_stats: inventory error_rate 0.0`, 22 times), free text (8),
   `service:` or `config:` pseudo-references (10), trace ids cited as span ids (5) and
   mangled change ids (`change:chb489531f`, 3). The verifier rejects them and the model
   gets one revision with the reasons; it rarely fixes all of them.
-- *Anchoring on a symptom.* Orders holds a pooled connection while it calls inventory and
+- Anchoring on a symptom. Orders holds a pooled connection while it calls inventory and
   payments, so any downstream slowdown also shows up as long `db.pool.acquire` spans. The
   model answers `connection_pool_exhaustion` in 10 of the 27 runs on the other nine
   scenarios (N+1 queries, the provider degradation, the disk-full replica, a slow query).
-- *Never finding the change.* In all 31 of its `list_changes` calls it passed an invented
+- Never finding the change. In all 31 of its `list_changes` calls it passed an invented
   change id instead of listing the log. The error message then lists the real ids, but in
   none of the 24 runs that had a culprit change did it open that change's diff.
-- *Diffs.* None of its diffs apply: context lines are invented or re-indented, and hunks
+- Diffs. None of its diffs apply: context lines are invented or re-indented, and hunks
   add settings that already exist.
-- *Prompt injection.* In an earlier run (before the final prompt and tool fixes) one
+- Prompt injection. In an earlier run (before the final prompt and tool fixes) one
   report on `poison_message` concluded "inventory / memory_leak", which is what the
   injected text in the delivery note asks for. In the final 3 runs it did not. Three runs
   are not evidence that the guardrails hold; the flagging and data-not-instructions rule
   reduce the risk, they do not remove it.
 
-**About the baseline.** The `rules` baseline was written by the same person (and AI
-assistant) who wrote the scenarios, so its signature table fits these ten incidents. Its
-score is an optimistic reference for hand-written rules, not evidence that rules beat
+### About the baseline
+
+I wrote the `rules` baseline after writing the scenarios, so its signature table fits
+these ten incidents. Its score is an optimistic reference for hand-written rules, not evidence that rules beat
 models in general. It fails where its assumptions break: it blames the worker's decoy
 change for the poison message (the cause is upstream in the gateway), and it falls for
 the same pool-wait symptom as the model on the provider degradation and the slow query.
 
-**About the evaluation.**
+### About the evaluation
 
 - Ten scenarios, three replicates each, on one synthetic system. The services are small
   and the faults are injected cleanly; production incidents have more noise and overlap.
-- Snapshots were recorded on one laptop. Fault severity depends on host speed: three
-  scenarios were made stronger after a run on a less loaded machine stopped paging (see
-  the git history), and a much faster or slower host could need retuning.
+- Snapshots were recorded on one laptop. Fault severity depends on host speed: I made three
+  scenarios stronger after a run on a less loaded machine stopped paging (see the git
+  history), and a much faster or slower host could need retuning.
 - `retry_storm` accepts two categories (see its `scenario.toml`); every other scenario has
   exactly one.
 - The fix check is a service-level test over a 16 to 32 second window after the fault. A
@@ -274,8 +277,8 @@ the same pool-wait symptom as the model on the provider degradation and the slow
   one turn (one run took 916 s against a 900 s limit).
 - The local model runs at temperature 0.7 with a fixed seed per replicate; numbers vary
   between runs, and with 30 runs per backend the confidence intervals are wide.
-- The Claude backend is implemented and unit-tested but was not evaluated: no API key was
-  configured for this run, so its row is absent rather than estimated.
+- The Claude backend is implemented and unit-tested but I have not evaluated it: no API
+  key was configured for this run, so its row is absent rather than estimated.
 - A pure Python OTLP receiver and SQLite are enough at this scale (20,000 to 100,000
   spans per run); they are not a substitute for a real telemetry backend.
 
@@ -319,7 +322,7 @@ cd ui && npm ci && npm run dev
 
 ## What would most likely improve the agent
 
-Each item follows from a failure above; none has been tried yet.
+Each item follows from a failure above. I have not tried them yet.
 
 - Split `list_changes` into a call with no arguments and a separate `get_change(id)`:
   the model never called it without an id.
@@ -350,8 +353,3 @@ results/                    tables generated by `ia eval report`
 
 `runs/` (snapshots, investigations, fix-check cache) is not committed: about 600 MB of
 SQLite files. It is regenerated by the commands above.
-
-## How this was built
-
-Built with AI coding assistants (Claude). Every number in this README is produced by code
-in this repository, from runs recorded on a MacBook Air (Apple M4, 16 GB) in October 2026.
