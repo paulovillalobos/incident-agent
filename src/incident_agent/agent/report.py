@@ -32,13 +32,14 @@ Category = Literal[
 assert set(Category.__args__) == set(CATEGORIES)  # type: ignore[attr-defined]
 
 
-_REF = re.compile(r"^\s*(span|trace|log|change|metric|file):\s*([^\s,;]+)", re.I)
+_REF = re.compile(r"^\s*(span|trace|log|change|metric|file):\s*<?([^\s,;<>]+)>?", re.I)
 
 
 def _refs(value: object) -> object:
     """Keep the typed reference and drop commentary models append to it.
 
-    ``"span:1795...1065: gateway request failed"`` becomes ``"span:1795...1065"``. Only the
+    ``"span:1795...1065: gateway request failed"`` and ``"span:<1795...1065>"`` become
+    ``"span:1795...1065"``. Only the
     formatting is normalised: the id itself is still resolved by the verifier, and entries
     that do not start with a reference kind are kept as they are (and then rejected).
     """

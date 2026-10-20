@@ -112,6 +112,7 @@ def test_commentary_after_a_reference_is_dropped_but_the_id_is_still_checked(
         evidence=[
             f"span:{snapshot.error_span}: pool acquire timed out after 500ms",
             "LOG:999999 (could not acquire)",
+            f"span:<{snapshot.error_span}>",
             "orders pool is small",
         ],
     )
